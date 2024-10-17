@@ -1,4 +1,4 @@
-
+import Control.Applicative
 
 
 --------------------------------------------------------------------------------
@@ -14,6 +14,116 @@ data Expr =
   -- ^ Some implementations reuse Var instead of using a different constructor.
   deriving (Eq, Show)
 
+
+--------------------------------------------------------------------------------
+
+data Parser a = Parser { runParser :: String -> Either String (a, String) }
+
+instance Functor Parser where
+  fmap f (Parser p) = Parser (fmap (\(a, b) -> (f a, b)) . p)
+
+instance Applicative Parser where
+  pure a = Parser (\s -> Right (a, s))
+  p <*> x = Parser (
+    \s -> do
+      (f, t) <- runParser p s
+      (a, u) <- runParser x t
+      pure (f a, u)
+    )
+
+instance Monad Parser where
+  p >>= q = Parser (\s -> runParser p s >>= (\(r, t) -> runParser (q r) t))
+  return = pure
+
+instance Alternative Parser where
+  empty = Parser (\_ -> Left "XXX")
+  p <|> q = Parser (\s -> either (const $ runParser q s) Right $ runParser p s)
+
+anychar :: Parser Char
+anychar = Parser p
+ where
+  p (c:cs) = Right (c, cs)
+  p "" = Left "Reached end of file"
+
+sat :: (Char -> Bool) -> Parser Char
+sat f = Parser p
+ where
+  p (c:cs) | f c = Right (c, cs)
+  p _ = Left "Doesn't satisfy"
+
+char :: Char -> Parser Char
+char c = sat (== c)
+
+string :: String -> Parser String
+string = mapM char
+
+isAlpha :: Char -> Bool
+isAlpha c = c >= 'a' && c <= 'z'
+
+isDigit :: Char -> Bool
+isDigit c = c >= '0' && c <= '9'
+
+isUnderscore :: Char -> Bool
+isUnderscore c = c == '_'
+
+whitespace = many (sat (== ' '))
+
+eof :: Parser ()
+eof = Parser p
+ where
+  p "" = Right ((), "")
+  p _ = Left "Expecting end of file"
+
+var :: Parser Expr
+var = do
+  a <- var'
+  pure (Var a)
+
+var' :: Parser String
+var' = do
+  a <- sat isAlpha
+  as <- many (sat (\c -> isAlpha c || isDigit c || isUnderscore c))
+  _ <- whitespace
+  pure (a : as)
+
+comb :: Parser Expr
+comb = do
+  a <- sat (\c -> c `elem` "SKI")
+  _ <- whitespace
+  pure (Comb [a])
+
+lam :: Parser Expr
+lam = do
+  _ <- sat (== '\\')
+  a <- var'
+  _ <- string "->"
+  _ <- whitespace
+  e <- expr
+  _ <- whitespace
+  pure (Lam a e)
+
+paren :: Parser Expr
+paren = do
+  _ <- char '('
+  _ <- whitespace
+  e <- expr
+  _ <- whitespace
+  _ <- char ')'
+  _ <- whitespace
+  pure e
+
+app :: Parser Expr
+app = do
+  as <- some (var <|> comb <|> paren)
+  pure (foldl1 App as)
+
+expr :: Parser Expr
+expr = app <|> lam
+
+parse :: String -> Either String Expr
+parse s = case runParser (expr <* eof) s of
+  Right (e, _) -> Right e
+  Left err -> Left err
 
 --------------------------------------------------------------------------------
 
@@ -110,10 +220,26 @@ example8 = App (App (App s k ) k) (App k (App (App (App s k) k) k))
   s = Comb "S"
   k = Comb "K"
 
+--------------------------------------------------------------------------------
+roundtrip :: Expr -> IO ()
+roundtrip e = case parse (render e) of
+  Right e' | e == e' -> pure ()
+  Right e' -> error ("Got " <> show e <> ", expected " <> show e)
+  Left _ -> error ("Can't parse back " <> show (render e))
 
 --------------------------------------------------------------------------------
 tests :: IO ()
 tests = do
+  mapM_ roundtrip
+    [ example1
+    , example2
+    , example3
+    , example4
+    , example5
+    , example6
+    , example7
+    , example8
+    ]
   mapM_ (test reduce)
     [ (example7, "x")
     , (example8, "K (S K K K)")
