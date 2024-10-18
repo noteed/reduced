@@ -5,8 +5,10 @@ import Control.Applicative
 data Expr =
   -- Source language
     Var String
+  | Int Int
   | App Expr Expr
   | Lam String Expr
+  | Add Expr Expr
 
   -- Target language
 
@@ -39,6 +41,14 @@ instance Alternative Parser where
   empty = Parser (\_ -> Left "XXX")
   p <|> q = Parser (\s -> either (const $ runParser q s) Right $ runParser p s)
 
+opt :: Parser a -> Parser (Maybe a)
+opt p = Parser (
+  \s ->
+    case runParser p s of
+      Right (a, t) -> pure (Just a, t)
+      Left _ -> pure (Nothing, s)
+  )
+
 anychar :: Parser Char
 anychar = Parser p
  where
@@ -63,6 +73,9 @@ isAlpha c = c >= 'a' && c <= 'z'
 isDigit :: Char -> Bool
 isDigit c = c >= '0' && c <= '9'
 
+isDigit' :: Char -> Bool
+isDigit' c = c >= '1' && c <= '9'
+
 isUnderscore :: Char -> Bool
 isUnderscore c = c == '_'
 
@@ -85,6 +98,13 @@ var' = do
   as <- many (sat (\c -> isAlpha c || isDigit c || isUnderscore c))
   _ <- whitespace
   pure (a : as)
+
+int :: Parser Expr
+int = do
+  a <- sat isDigit'
+  as <- many (sat isDigit)
+  _ <- whitespace
+  pure (Int (read (a : as)))
 
 comb :: Parser Expr
 comb = do
@@ -114,11 +134,22 @@ paren = do
 
 app :: Parser Expr
 app = do
-  as <- some (var <|> comb <|> paren)
+  as <- some (var <|> int <|> comb <|> paren)
   pure (foldl1 App as)
 
 expr :: Parser Expr
-expr = app <|> lam
+expr = do
+  a <- app <|> lam
+  _ <- whitespace
+  mb <- opt (
+    do
+      _ <- char '+'
+      _ <- whitespace
+      expr
+    )
+  case mb of
+    Just b -> pure (Add a b)
+    Nothing -> pure a
 
 parse :: String -> Either String Expr
 parse s = case runParser (expr <* eof) s of
@@ -129,7 +160,9 @@ parse s = case runParser (expr <* eof) s of
 
 render :: Expr -> String
 render (Var x) = x
+render (Int n) = show n
 render (App f a) = renderL f <> " " <> renderR a
+render (Add a b) = render a <> " + " <> render b
 render (Lam x a) = "\\" <> x <> " -> " <> render a
 render (Comb x) = x
 
@@ -137,6 +170,7 @@ renderL (Lam x a) = "(" <> render (Lam x a) <> ")"
 renderL a = render a
 
 renderR (App f a) = "(" <> render (App f a) <> ")"
+renderR (Add a b) = "(" <> render (Add a b) <> ")" -- hack for "(\\x -> \\y -> x) 4 (4 + 5)"
 renderR a = render a
 
 --------------------------------------------------------------------------------
@@ -155,14 +189,19 @@ graph (App f a) = unlines
 -- innermost ones first.
 compile :: Expr -> Expr
 compile (Var x) = (Var x)
+compile (Int n) = Int n
 compile (App f a) = App (compile f) (compile a)
 compile (Lam x a) = abstract x a
+compile (Add a b) = Add (compile a) (compile b)
 
 -- | The bracket abstraction (called on lambda terms above).
 abstract :: String -> Expr -> Expr
 abstract x (Var y) = if x == y then Comb "I" else App (Comb "K") (Var y)
+abstract _ (Int n) = App (Comb "K") (Int n)
 abstract x (App f a) = App (App (Comb "S") (abstract x f)) (abstract x a)
 abstract x (Lam y a) = abstract x (abstract y a)
+abstract x (Add a b) = Add (abstract x a) (abstract x b)
+abstract _ (Comb c) = App (Comb "K") (Comb c)
 
 
 --------------------------------------------------------------------------------
@@ -185,10 +224,14 @@ step (App (App (App (Comb "S") f) g) x) = App (App f x) (App g x)
 step (App (App (Comb "K") a) _) = a
 step (App (Comb "I") a) = a
 step (App f a) = App f a
+step (Add a b) = primAdd a b
 step (Var x) = Var x
+step (Int n) = Int n
 step (Lam _ _) = error "lambda in object code"
 step (Comb x) = Comb x
 
+primAdd (Int a) (Int b) = Int (a + b)
+primAdd _ _ = error "Type mismatch"
 
 --------------------------------------------------------------------------------
 display :: Expr -> IO ()
@@ -220,6 +263,9 @@ example8 = App (App (App s k ) k) (App k (App (App (App s k) k) k))
   s = Comb "S"
   k = Comb "K"
 
+example9 = Int 4
+example10 = Add (Int 4) (Int 5)
+
 --------------------------------------------------------------------------------
 roundtrip :: Expr -> IO ()
 roundtrip e = case parse (render e) of
@@ -239,11 +285,16 @@ tests = do
     , example6
     , example7
     , example8
+
+    , example9
+    , example10
     ]
   mapM_ (test reduce)
     [ (example7, "x")
     , (example8, "K (S K K K)")
     , (App (App (Comb "K") (Comb "I")) (Var "x"), "I")
+    , (example9, "4")
+    , (example10, "9")
     ]
   putStrLn "Ok."
  where
