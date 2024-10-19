@@ -8,7 +8,7 @@ data Expr =
   | Int Int
   | App Expr Expr
   | Lam String Expr
-  | Add Expr Expr
+  | Prim String
 
   -- Target language
 
@@ -148,7 +148,7 @@ expr = do
       expr
     )
   case mb of
-    Just b -> pure (Add a b)
+    Just b -> pure (App (App (Prim "+") b) a)
     Nothing -> pure a
 
 parse :: String -> Either String Expr
@@ -161,16 +161,16 @@ parse s = case runParser (expr <* eof) s of
 render :: Expr -> String
 render (Var x) = x
 render (Int n) = show n
+render (App (App (Prim o) b) a) = renderL a <> " " <> o <> " " <> renderR b
 render (App f a) = renderL f <> " " <> renderR a
-render (Add a b) = render a <> " + " <> render b
 render (Lam x a) = "\\" <> x <> " -> " <> render a
+render (Prim o) = o
 render (Comb x) = x
 
 renderL (Lam x a) = "(" <> render (Lam x a) <> ")"
 renderL a = render a
 
 renderR (App f a) = "(" <> render (App f a) <> ")"
-renderR (Add a b) = "(" <> render (Add a b) <> ")" -- hack for "(\\x -> \\y -> x) 4 (4 + 5)"
 renderR a = render a
 
 --------------------------------------------------------------------------------
@@ -192,7 +192,7 @@ compile (Var x) = (Var x)
 compile (Int n) = Int n
 compile (App f a) = App (compile f) (compile a)
 compile (Lam x a) = abstract x a
-compile (Add a b) = Add (compile a) (compile b)
+compile (Prim o) = Prim o
 
 -- | The bracket abstraction (called on lambda terms above).
 abstract :: String -> Expr -> Expr
@@ -200,7 +200,7 @@ abstract x (Var y) = if x == y then Comb "I" else App (Comb "K") (Var y)
 abstract _ (Int n) = App (Comb "K") (Int n)
 abstract x (App f a) = App (App (Comb "S") (abstract x f)) (abstract x a)
 abstract x (Lam y a) = abstract x (abstract y a)
-abstract x (Add a b) = Add (abstract x a) (abstract x b)
+abstract _ (Prim o) = App (Comb "K") (Prim o)
 abstract _ (Comb c) = App (Comb "K") (Comb c)
 
 
@@ -223,11 +223,12 @@ step :: Expr -> Expr
 step (App (App (App (Comb "S") f) g) x) = App (App f x) (App g x)
 step (App (App (Comb "K") a) _) = a
 step (App (Comb "I") a) = a
+step (App (App (Prim "+") b) a) = primAdd a b
 step (App f a) = App f a
-step (Add a b) = primAdd a b
 step (Var x) = Var x
 step (Int n) = Int n
 step (Lam _ _) = error "lambda in object code"
+step (Prim o) = Prim o
 step (Comb x) = Comb x
 
 primAdd (Int a) (Int b) = Int (a + b)
@@ -264,7 +265,7 @@ example8 = App (App (App s k ) k) (App k (App (App (App s k) k) k))
   k = Comb "K"
 
 example9 = Int 4
-example10 = Add (Int 4) (Int 5)
+example10 = App (App (Prim "+") (Int 5)) (Int 4)
 example11 = Lam "x" (Lam "y" (Var "x"))
 example12 = App (App example11 example9) example10
 
