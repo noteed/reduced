@@ -265,6 +265,8 @@ example8 = App (App (App s k ) k) (App k (App (App (App s k) k) k))
 
 example9 = Int 4
 example10 = Add (Int 4) (Int 5)
+example11 = Lam "x" (Lam "y" (Var "x"))
+example12 = App (App example11 example9) example10
 
 --------------------------------------------------------------------------------
 roundtrip :: Expr -> IO ()
@@ -288,6 +290,8 @@ tests = do
 
     , example9
     , example10
+    , example11
+    , example12
     ]
   mapM_ (test reduce)
     [ (example7, "x")
