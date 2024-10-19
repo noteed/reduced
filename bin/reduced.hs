@@ -269,6 +269,11 @@ example10 = App (App (Prim "+") (Int 5)) (Int 4)
 example11 = Lam "x" (Lam "y" (Var "x"))
 example12 = App (App example11 example9) example10
 
+-- The Y combinator
+-- TODO Check it is compiled correctly.
+example13 = Lam "f" (App (Lam "x" (App (Var "f") (App (Var "x") (Var "x")))) (Lam "x" (App (Var "f") (App (Var "x") (Var "x")))))
+
+
 --------------------------------------------------------------------------------
 roundtrip :: Expr -> IO ()
 roundtrip e = case parse (render e) of
