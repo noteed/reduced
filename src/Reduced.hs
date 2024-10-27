@@ -179,17 +179,6 @@ renderR a = render a
 
 --------------------------------------------------------------------------------
 
-graph :: Expr -> String
-graph (Var x) = x
-graph (App f a) = unlines
-  [ "  @"
-  , " / \\"
-  , graph f <> "   " <> graph a
-  ]
-
-
---------------------------------------------------------------------------------
-
 -- | Rewrite closed lambdas to combinators (S, K, and I), starting with the
 -- innermost ones first.
 compile :: Expr -> Expr

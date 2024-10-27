@@ -1,5 +1,8 @@
 -- @
 --     $ ghci -isrc/ bin/reduced.hs
+--
+--     $ dot -Nfontname="DejaVu Sans Mono" -Nfontsize=20 -Tsvg example.dot -o example.svg
+--     $ kitten icat example.svg
 -- @
 
 import Reduced
@@ -8,6 +11,16 @@ import Control.Monad.State (State)
 import Control.Monad.State qualified as State
 import Data.Map (Map)
 import Data.Map qualified as Map
+import System.Process (callCommand)
+
+
+--------------------------------------------------------------------------------
+graph :: Expr -> IO ()
+graph e = do
+  dotFn "example.dot" $ build e
+  callCommand "dot -Nfontname=\"DejaVu Sans Mono\" -Nfontsize=20 -Tsvg example.dot -o example.svg"
+  callCommand "kitten icat --align=left example.svg"
+
 
 --------------------------------------------------------------------------------
 data Node = NApp Int Func Arg
