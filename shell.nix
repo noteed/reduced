@@ -5,6 +5,7 @@ let
 
   normal = with pkgs; [
       (hp.ghcWithPackages (hpkgs: [
+        hpkgs.pretty-simple
       ]))
       pkgs.graphviz
     ];
