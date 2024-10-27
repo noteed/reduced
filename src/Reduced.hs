@@ -1,3 +1,5 @@
+module Reduced where
+
 import Control.Applicative
 
 
@@ -156,6 +158,7 @@ parse s = case runParser (expr <* eof) s of
   Right (e, _) -> Right e
   Left err -> Left err
 
+
 --------------------------------------------------------------------------------
 
 render :: Expr -> String
@@ -173,6 +176,7 @@ renderL a = render a
 renderR (App f a) = "(" <> render (App f a) <> ")"
 renderR a = render a
 
+
 --------------------------------------------------------------------------------
 
 graph :: Expr -> String
@@ -182,6 +186,7 @@ graph (App f a) = unlines
   , " / \\"
   , graph f <> "   " <> graph a
   ]
+
 
 --------------------------------------------------------------------------------
 
@@ -234,6 +239,7 @@ step (Comb x) = Comb x
 primAdd (Int a) (Int b) = Int (a + b)
 primAdd _ _ = error "Type mismatch"
 
+
 --------------------------------------------------------------------------------
 display :: Expr -> IO ()
 display expr = do
@@ -273,6 +279,9 @@ example12 = App (App example11 example9) example10
 -- TODO Check it is compiled correctly.
 example13 = Lam "f" (App (Lam "x" (App (Var "f") (App (Var "x") (Var "x")))) (Lam "x" (App (Var "f") (App (Var "x") (Var "x")))))
 
+example14 = App (Comb "I") (Int 4)
+example15 = App (App (Comb "K") (Int 3)) (Int 4)
+
 
 --------------------------------------------------------------------------------
 roundtrip :: Expr -> IO ()
@@ -280,6 +289,7 @@ roundtrip e = case parse (render e) of
   Right e' | e == e' -> pure ()
   Right e' -> error ("Got " <> show e <> ", expected " <> show e)
   Left _ -> error ("Can't parse back " <> show (render e))
+
 
 --------------------------------------------------------------------------------
 tests :: IO ()
