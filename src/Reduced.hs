@@ -217,7 +217,7 @@ step :: Expr -> Expr
 step (App (App (App (Comb "S") f) g) x) = App (App f x) (App g x)
 step (App (App (Comb "K") a) _) = a
 step (App (Comb "I") a) = a
-step (App (App (Prim "+") b) a) = primAdd a b
+step (App (App (Prim "+") b) a) = primAdd (reduce a) (reduce b)
 step (App f a) = App (step f) a
 step (Var x) = Var x
 step (Int n) = Int n
@@ -226,7 +226,7 @@ step (Prim o) = Prim o
 step (Comb x) = Comb x
 
 primAdd (Int a) (Int b) = Int (a + b)
-primAdd _ _ = error "Type mismatch"
+primAdd a b = error $ "Type mismatch: " <> show a <> ", " <> show b
 
 
 --------------------------------------------------------------------------------
