@@ -1,4 +1,4 @@
-module Reduced where
+module Reduced.Core where
 
 import Control.Applicative
 
